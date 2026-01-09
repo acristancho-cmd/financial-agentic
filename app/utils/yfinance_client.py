@@ -9,6 +9,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from app.utils.rate_limiter import rate_limiter
+from app.utils.circuit_breaker import circuit_breaker
 
 
 class YFinanceClient:
@@ -22,14 +23,19 @@ class YFinanceClient:
         if cls._session is None:
             cls._session = requests.Session()
             
-            # Headers personalizados para evitar bloqueos
+            # Headers personalizados más realistas para evitar bloqueos
             cls._session.headers.update({
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Cache-Control': 'max-age=0',
             })
             
             # Configurar retry strategy
@@ -58,8 +64,18 @@ class YFinanceClient:
         Returns:
             Objeto yf.Ticker
         """
+        # Verificar circuit breaker
+        if not circuit_breaker.can_proceed():
+            wait_time = circuit_breaker.get_wait_time()
+            if wait_time > 0:
+                raise Exception(f"Circuit breaker abierto. Yahoo Finance está bloqueando. Espera {int(wait_time)} segundos antes de intentar de nuevo.")
+        
         # Esperar si es necesario para respetar rate limiting
         rate_limiter.wait_if_needed()
+        
+        # Delay adicional antes de crear el ticker (más conservador en producción)
+        # Delay aleatorio entre 2-4 segundos para parecer más humano
+        time.sleep(2.0 + random.uniform(0, 2.0))
         
         # Crear Ticker sin hacer peticiones todavía
         # La sesión personalizada se usará cuando se haga la primera petición real

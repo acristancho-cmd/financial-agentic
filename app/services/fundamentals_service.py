@@ -30,20 +30,32 @@ class FundamentalsService:
         if cached_data is not None:
             return cached_data
         
-        max_retries = 3
-        delay = 1.0
+        max_retries = 2  # Reducido a 2 intentos para evitar bloqueos prolongados
+        delay = 5.0  # Aumentado a 5 segundos inicial
         
         for attempt in range(max_retries):
             try:
+                # Delay antes de hacer la petición (más tiempo en producción)
+                if attempt > 0:
+                    # Backoff exponencial más largo: 10s, 20s
+                    wait_time = delay * (2 ** attempt) + random.uniform(2.0, 5.0)
+                    time.sleep(wait_time)
+                else:
+                    # Delay inicial más largo para evitar bloqueos inmediatos
+                    time.sleep(3.0 + random.uniform(1.0, 2.0))
+                
                 # Usar cliente mejorado con manejo de rate limiting
                 stock = YFinanceClient.get_ticker(ticker_formatted)
                 
-                # Pequeño delay para evitar rate limiting
-                if attempt > 0:
-                    time.sleep(0.5)
+                # Delay adicional antes de hacer la petición real
+                time.sleep(1.0 + random.uniform(0.5, 1.5))
                 
                 # Hacer la petición real (solo UNA vez)
                 info = stock.info
+                
+                # Si llegamos aquí, fue exitoso - registrar éxito en circuit breaker
+                from app.utils.circuit_breaker import circuit_breaker
+                circuit_breaker.record_success()
                 
                 result = {
                     "ticker": ticker_formatted,
@@ -85,17 +97,31 @@ class FundamentalsService:
                 return result
             except Exception as e:
                 error_str = str(e)
-                if "429" in error_str or "Too Many Requests" in error_str:
+                
+                # Registrar fallo en circuit breaker
+                from app.utils.circuit_breaker import circuit_breaker
+                circuit_breaker.record_failure()
+                
+                if "429" in error_str or "Too Many Requests" in error_str or "Rate limit" in error_str:
                     if attempt < max_retries - 1:
-                        # Esperar con backoff exponencial + jitter
-                        wait_time = delay * (2 ** attempt) + random.uniform(1.0, 3.0)
+                        # Esperar mucho más tiempo para errores 429 (15-30 segundos)
+                        wait_time = 15.0 + (attempt * 10.0) + random.uniform(3.0, 7.0)
                         time.sleep(wait_time)
                         continue
                     else:
-                        return {"ticker": ticker_formatted if 'ticker_formatted' in locals() else ticker, "error": f"Rate limit alcanzado después de {max_retries} intentos. Por favor espera unos minutos.", "status": "error"}
+                        wait_time = circuit_breaker.get_wait_time()
+                        error_msg = f"Yahoo Finance está bloqueando temporalmente esta IP. "
+                        if wait_time > 0:
+                            error_msg += f"Espera {int(wait_time)} segundos antes de intentar de nuevo."
+                        else:
+                            error_msg += "Por favor espera 3-5 minutos antes de intentar de nuevo."
+                        return {"ticker": ticker_formatted if 'ticker_formatted' in locals() else ticker, "error": error_msg, "status": "error"}
+                elif "Circuit breaker" in error_str:
+                    # El circuit breaker está abierto
+                    return {"ticker": ticker_formatted if 'ticker_formatted' in locals() else ticker, "error": error_str, "status": "error"}
                 else:
                     if attempt < max_retries - 1:
-                        wait_time = delay * (2 ** attempt)
+                        wait_time = delay * (2 ** attempt) + random.uniform(2.0, 4.0)
                         time.sleep(wait_time)
                         continue
                     else:

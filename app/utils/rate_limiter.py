@@ -79,6 +79,6 @@ class RateLimiter:
 
 
 # Instancia global del rate limiter
-# Máximo 2 peticiones cada 5 segundos a Yahoo Finance
-rate_limiter = RateLimiter(max_requests=2, time_window=5.0)
+# Máximo 1 petición cada 15 segundos a Yahoo Finance (muy conservador para producción)
+rate_limiter = RateLimiter(max_requests=1, time_window=15.0)
 
