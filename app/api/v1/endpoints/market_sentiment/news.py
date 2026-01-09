@@ -5,10 +5,10 @@ from fastapi import APIRouter, Path
 from app.services.market_sentiment_service import MarketSentimentService
 from app.models.market_sentiment import NewsResponse
 
-router = APIRouter(prefix="/news", tags=["market-sentiment"])
+router = APIRouter(tags=["market-sentiment"])
 
 
-@router.get("/{ticker}", response_model=NewsResponse)
+@router.get("/{ticker}/news", response_model=NewsResponse)
 async def get_news(ticker: str = Path(..., description="Ticker de la acción")):
     """Obtiene noticias recientes relacionadas con la acción"""
     result = MarketSentimentService.get_news(ticker)

@@ -6,10 +6,10 @@ from app.services.comparative_service import ComparativeService
 from app.utils.ticker_formatter import parse_ticker_list
 from app.models.comparative import CorrelationResponse
 
-router = APIRouter(prefix="/correlation", tags=["comparative"])
+router = APIRouter(tags=["comparative"])
 
 
-@router.get("/{ticker}", response_model=CorrelationResponse)
+@router.get("/{ticker}/correlation", response_model=CorrelationResponse)
 async def get_correlation(
     ticker: str = Path(..., description="Ticker principal"),
     compare_tickers: str = Query(..., description="Tickers para comparar separados por comas (ej: TSLA,MSFT,GOOGL)"),

@@ -5,10 +5,10 @@ from fastapi import APIRouter, Path
 from app.services.fundamentals_service import FundamentalsService
 from app.models.fundamentals import CashflowResponse
 
-router = APIRouter(prefix="/cashflow", tags=["fundamentals"])
+router = APIRouter(tags=["fundamentals"])
 
 
-@router.get("/{ticker}", response_model=CashflowResponse)
+@router.get("/{ticker}/cashflow", response_model=CashflowResponse)
 async def get_cashflow(ticker: str = Path(..., description="Ticker de la acción")):
     """Obtiene flujo de efectivo histórico"""
     result = FundamentalsService.get_cashflow(ticker)
