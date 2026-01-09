@@ -1,0 +1,2 @@
+"""Endpoints de análisis técnico"""
+
