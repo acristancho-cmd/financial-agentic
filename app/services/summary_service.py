@@ -5,6 +5,8 @@ import yfinance as yf
 from typing import Dict
 from app.utils.ticker_formatter import format_ticker
 from app.services.fundamentals_service import FundamentalsService
+from app.utils.yfinance_client import YFinanceClient
+from app.utils.cache import cache
 
 
 class SummaryService:
@@ -13,9 +15,15 @@ class SummaryService:
     @staticmethod
     def get_summary(ticker: str) -> Dict:
         """Obtiene resumen completo"""
+        ticker_formatted = format_ticker(ticker)
+        cache_key = f"summary:{ticker_formatted}"
+        
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            return cached_data
+        
         try:
-            ticker_formatted = format_ticker(ticker)
-            stock = yf.Ticker(ticker_formatted)
+            stock = YFinanceClient.get_ticker(ticker_formatted)
             info = stock.info
             hist = stock.history(period="1d")
             
@@ -48,7 +56,7 @@ class SummaryService:
                 "free_cashflow": info.get("freeCashflow")
             }
             
-            return {
+            result = {
                 "ticker": ticker_formatted,
                 "company_name": info.get("longName"),
                 "sector": info.get("sector"),
@@ -60,12 +68,22 @@ class SummaryService:
                 "recommendations": info.get("recommendationKey"),
                 "status": "success"
             }
+            
+            cache.set(cache_key, result, ttl=300)  # 5 minutos
+            return result
         except Exception as e:
             return {"ticker": ticker, "error": str(e), "status": "error"}
     
     @staticmethod
     def get_key_metrics(ticker: str) -> Dict:
         """Obtiene métricas clave organizadas por categoría"""
+        ticker_formatted = format_ticker(ticker)
+        cache_key = f"key_metrics:{ticker_formatted}"
+        
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            return cached_data
+        
         try:
             fundamentals = FundamentalsService.get_fundamentals(ticker)
             
@@ -107,7 +125,7 @@ class SummaryService:
                 "quick_ratio": fundamentals.get("quick_ratio")
             }
             
-            return {
+            result = {
                 "ticker": fundamentals.get("ticker"),
                 "valuation_metrics": valuation_metrics,
                 "profitability_metrics": profitability_metrics,
@@ -115,6 +133,9 @@ class SummaryService:
                 "efficiency_metrics": efficiency_metrics,
                 "status": "success"
             }
+            
+            cache.set(cache_key, result, ttl=300)  # 5 minutos
+            return result
         except Exception as e:
             return {"ticker": ticker, "error": str(e), "status": "error"}
 

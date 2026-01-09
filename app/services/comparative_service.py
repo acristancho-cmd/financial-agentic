@@ -7,6 +7,7 @@ import numpy as np
 from typing import Dict, List
 from app.utils.ticker_formatter import format_ticker, parse_ticker_list
 from app.services.fundamentals_service import FundamentalsService
+from app.utils.yfinance_client import YFinanceClient
 
 
 class ComparativeService:
@@ -52,7 +53,7 @@ class ComparativeService:
             compare_formatted = [format_ticker(t) for t in compare_tickers]
             
             # Obtener datos históricos del ticker principal
-            stock_main = yf.Ticker(ticker_formatted)
+            stock_main = YFinanceClient.get_ticker(ticker_formatted)
             hist_main = stock_main.history(period=period)
             
             if hist_main.empty:
@@ -64,7 +65,7 @@ class ComparativeService:
             # Calcular correlación con cada ticker de comparación
             for compare_ticker in compare_formatted:
                 try:
-                    stock_compare = yf.Ticker(compare_ticker)
+                    stock_compare = YFinanceClient.get_ticker(compare_ticker)
                     hist_compare = stock_compare.history(period=period)
                     
                     if not hist_compare.empty:

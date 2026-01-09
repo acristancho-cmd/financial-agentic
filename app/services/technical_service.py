@@ -6,6 +6,8 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Optional
 from app.utils.ticker_formatter import format_ticker
+from app.utils.yfinance_client import YFinanceClient
+from app.utils.cache import cache
 
 
 class TechnicalService:
@@ -14,26 +16,37 @@ class TechnicalService:
     @staticmethod
     def get_history(ticker: str, period: str = "1y", interval: str = "1d") -> Dict:
         """Obtiene datos históricos"""
+        ticker_formatted = format_ticker(ticker)
+        cache_key = f"history:{ticker_formatted}:{period}:{interval}"
+        
+        # Intentar obtener del caché
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            return cached_data
+        
         try:
-            ticker_formatted = format_ticker(ticker)
-            stock = yf.Ticker(ticker_formatted)
+            stock = YFinanceClient.get_ticker(ticker_formatted)
             hist = stock.history(period=period, interval=interval)
             
             if hist.empty:
-                return {"ticker": ticker_formatted, "history": [], "status": "success"}
+                result = {"ticker": ticker_formatted, "history": [], "status": "success"}
+            else:
+                # Convertir a lista de diccionarios
+                hist_dict = hist.reset_index().to_dict('records')
+                # Convertir Timestamp a string
+                for record in hist_dict:
+                    if 'Date' in record:
+                        record['Date'] = str(record['Date'])
+                
+                result = {
+                    "ticker": ticker_formatted,
+                    "history": hist_dict,
+                    "status": "success"
+                }
             
-            # Convertir a lista de diccionarios
-            hist_dict = hist.reset_index().to_dict('records')
-            # Convertir Timestamp a string
-            for record in hist_dict:
-                if 'Date' in record:
-                    record['Date'] = str(record['Date'])
-            
-            return {
-                "ticker": ticker_formatted,
-                "history": hist_dict,
-                "status": "success"
-            }
+            # Guardar en caché (15 minutos - datos históricos)
+            cache.set(cache_key, result, ttl=900)
+            return result
         except Exception as e:
             return {"ticker": ticker, "error": str(e), "status": "error"}
     
@@ -69,9 +82,15 @@ class TechnicalService:
     @staticmethod
     def get_technical_indicators(ticker: str, period: str = "6mo") -> Dict:
         """Obtiene indicadores técnicos"""
+        ticker_formatted = format_ticker(ticker)
+        cache_key = f"technical_indicators:{ticker_formatted}:{period}"
+        
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            return cached_data
+        
         try:
-            ticker_formatted = format_ticker(ticker)
-            stock = yf.Ticker(ticker_formatted)
+            stock = YFinanceClient.get_ticker(ticker_formatted)
             hist = stock.history(period=period)
             
             if hist.empty or len(hist) < 50:
@@ -139,9 +158,15 @@ class TechnicalService:
     @staticmethod
     def get_volatility(ticker: str, period: str = "1y") -> Dict:
         """Obtiene análisis de volatilidad"""
+        ticker_formatted = format_ticker(ticker)
+        cache_key = f"volatility:{ticker_formatted}:{period}"
+        
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            return cached_data
+        
         try:
-            ticker_formatted = format_ticker(ticker)
-            stock = yf.Ticker(ticker_formatted)
+            stock = YFinanceClient.get_ticker(ticker_formatted)
             hist = stock.history(period=period)
             info = stock.info
             
@@ -169,7 +194,7 @@ class TechnicalService:
             # Sharpe Ratio (asumiendo risk-free rate de 0)
             sharpe = (returns.mean() * 252) / (returns.std() * np.sqrt(252)) if returns.std() > 0 else None
             
-            return {
+            result = {
                 "ticker": ticker_formatted,
                 "volatility": float(volatility) if not np.isnan(volatility) else None,
                 "beta": float(beta) if beta is not None else None,
@@ -178,15 +203,24 @@ class TechnicalService:
                 "sharpe_ratio": float(sharpe) if sharpe is not None and not np.isnan(sharpe) else None,
                 "status": "success"
             }
+            
+            cache.set(cache_key, result, ttl=600)  # 10 minutos
+            return result
         except Exception as e:
             return {"ticker": ticker, "error": str(e), "status": "error"}
     
     @staticmethod
     def get_performance(ticker: str, period: str = "1y") -> Dict:
         """Obtiene análisis de rendimiento"""
+        ticker_formatted = format_ticker(ticker)
+        cache_key = f"performance:{ticker_formatted}:{period}"
+        
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            return cached_data
+        
         try:
-            ticker_formatted = format_ticker(ticker)
-            stock = yf.Ticker(ticker_formatted)
+            stock = YFinanceClient.get_ticker(ticker_formatted)
             hist = stock.history(period=period)
             
             if hist.empty:
@@ -223,7 +257,7 @@ class TechnicalService:
             # Volatilidad
             volatility = returns.std() * np.sqrt(252) * 100
             
-            return {
+            result = {
                 "ticker": ticker_formatted,
                 "daily_return": float(daily_return) if daily_return is not None and not np.isnan(daily_return) else None,
                 "weekly_return": float(weekly_return) if weekly_return is not None and not np.isnan(weekly_return) else None,
@@ -235,6 +269,9 @@ class TechnicalService:
                 "volatility": float(volatility) if not np.isnan(volatility) else None,
                 "status": "success"
             }
+            
+            cache.set(cache_key, result, ttl=600)  # 10 minutos
+            return result
         except Exception as e:
             return {"ticker": ticker, "error": str(e), "status": "error"}
 

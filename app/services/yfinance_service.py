@@ -5,6 +5,8 @@ import yfinance as yf
 from typing import Dict, List
 from app.config import settings
 from app.utils.ticker_formatter import format_ticker
+from app.utils.yfinance_client import YFinanceClient
+from app.utils.cache import cache
 
 
 class YFinanceService:
@@ -21,8 +23,15 @@ class YFinanceService:
         Returns:
             Diccionario con información de dividendos o error
         """
+        cache_key = f"dividends:{ticker}"
+        
+        # Intentar obtener del caché primero
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            return cached_data
+        
         try:
-            stock = yf.Ticker(ticker)
+            stock = YFinanceClient.get_ticker(ticker)
             info = stock.info
             
             # Función auxiliar para obtener valores seguros
@@ -63,6 +72,8 @@ class YFinanceService:
                 "status": "success"
             }
             
+            # Guardar en caché (5 minutos)
+            cache.set(cache_key, data, ttl=300)
             return data
         except Exception as e:
             return {
