@@ -53,3 +53,4 @@ async def health_check():
         "version": settings.APP_VERSION
     }
 
+

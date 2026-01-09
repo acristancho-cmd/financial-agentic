@@ -10,3 +10,4 @@ api_router = APIRouter(prefix="/api/v1")
 # Incluir routers de cada funcionalidad
 api_router.include_router(dividends.router)
 
+

@@ -25,14 +25,41 @@ class YFinanceService:
             stock = yf.Ticker(ticker)
             info = stock.info
             
-            # Extraer métricas de dividendos
+            # Función auxiliar para obtener valores seguros
+            def safe_get(key, default=0):
+                value = info.get(key)
+                return value if value is not None else default
+            
+            # Extraer métricas de dividendos básicas
+            dividend_yield_raw = safe_get("dividendYield", 0)
+            dividend_yield = f"{dividend_yield_raw}%" if dividend_yield_raw else "0%"
+            
+            # Métricas de salud financiera del dividendo
             data = {
                 "ticker": ticker,
-                "dividend_yield": (info.get("dividendYield", 0) or 0) * 100,
-                "payout_ratio": (info.get("payoutRatio", 0) or 0) * 100,
-                "dividend_rate": info.get("dividendRate", 0) or 0,
-                "last_dividend_value": info.get("lastDividendValue", 0) or 0,
+                # Métricas básicas de dividendos
+                "dividend_yield": dividend_yield,
+                "payout_ratio": (safe_get("payoutRatio", 0) or 0) * 100,
+                "dividend_rate": safe_get("dividendRate", 0),
+                "last_dividend_value": safe_get("lastDividendValue", 0),
                 "currency": info.get("currency", settings.DEFAULT_CURRENCY),
+                
+                # Métricas históricas y proyectadas de dividendos
+                "trailing_annual_dividend_rate": safe_get("trailingAnnualDividendRate", 0),
+                "trailing_annual_dividend_yield": safe_get("trailingAnnualDividendYield", 0),
+                "five_year_avg_dividend_yield": safe_get("fiveYearAvgDividendYield", 0),
+                "forward_dividend_yield": safe_get("forwardDividendYield", 0),
+                "forward_dividend_rate": safe_get("forwardDividendRate", 0),
+                
+                # Métricas de salud financiera (capacidad de pagar dividendos)
+                "free_cashflow": safe_get("freeCashflow", 0),
+                "operating_cashflow": safe_get("operatingCashflow", 0),
+                "current_ratio": safe_get("currentRatio", 0),
+                "debt_to_equity": safe_get("debtToEquity", 0),
+                "return_on_equity": safe_get("returnOnEquity", 0),
+                "profit_margins": (safe_get("profitMargins", 0) or 0) * 100,
+                "earnings_growth": (safe_get("earningsGrowth", 0) or 0) * 100,
+                
                 "status": "success"
             }
             
@@ -71,11 +98,23 @@ class YFinanceService:
             if "error" in dividend_info:
                 results.append({
                     "ticker": ticker_final,
-                    "dividend_yield": 0,
+                    "dividend_yield": "0%",
                     "payout_ratio": 0,
                     "dividend_rate": 0,
                     "last_dividend_value": 0,
                     "currency": "N/A",
+                    "trailing_annual_dividend_rate": 0,
+                    "trailing_annual_dividend_yield": 0,
+                    "five_year_avg_dividend_yield": 0,
+                    "forward_dividend_yield": 0,
+                    "forward_dividend_rate": 0,
+                    "free_cashflow": 0,
+                    "operating_cashflow": 0,
+                    "current_ratio": 0,
+                    "debt_to_equity": 0,
+                    "return_on_equity": 0,
+                    "profit_margins": 0,
+                    "earnings_growth": 0,
                     "status": "error",
                     "error": dividend_info["error"]
                 })
