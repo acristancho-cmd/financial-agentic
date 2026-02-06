@@ -4,7 +4,7 @@ pydantic==2.5.0
 pydantic-settings==2.1.0
 pandas==2.1.3
 numpy==1.26.2
-requests==2.31.0
+requests==2.32.4
 urllib3==2.1.0
 tradingview-scraper>=0.4.19
 
