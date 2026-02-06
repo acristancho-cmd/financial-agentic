@@ -8,6 +8,8 @@ from typing import Dict, Optional
 from app.utils.ticker_formatter import format_ticker
 from app.utils.yfinance_client import YFinanceClient
 from app.utils.cache import cache
+from app.utils.alpha_vantage_client import AlphaVantageClient
+from app.utils.alpha_vantage_client import AlphaVantageClient
 
 
 class FundamentalsService:
@@ -20,8 +22,65 @@ class FundamentalsService:
         return value if value is not None else default
     
     @staticmethod
+    def _convert_alpha_vantage_to_fundamentals(av_data: Dict, ticker_formatted: str) -> Dict:
+        """Convierte datos de Alpha Vantage al formato de fundamentals"""
+        def safe_float(value, default=None):
+            try:
+                if value and value != "None" and value != "N/A" and str(value).strip():
+                    return float(value)
+            except:
+                pass
+            return default
+        
+        def safe_percent(value, default=None):
+            try:
+                if value and value != "None" and value != "N/A" and str(value).strip():
+                    # Alpha Vantage puede venir como "15.5%" o "15.5"
+                    val_str = str(value).replace("%", "").strip()
+                    if val_str:
+                        return float(val_str)
+            except:
+                pass
+            return default
+        
+        return {
+            "ticker": ticker_formatted,
+            "market_cap": safe_float(av_data.get("MarketCapitalization")),
+            "enterprise_value": safe_float(av_data.get("EnterpriseValue")),
+            "pe_ratio": safe_float(av_data.get("PERatio")),
+            "forward_pe": safe_float(av_data.get("ForwardPE")),
+            "peg_ratio": safe_float(av_data.get("PEGRatio")),
+            "price_to_book": safe_float(av_data.get("PriceToBookRatio")),
+            "price_to_sales": safe_float(av_data.get("PriceToSalesRatioTTM")),
+            "ev_to_revenue": safe_float(av_data.get("EnterpriseValueToRevenue")),
+            "ev_to_ebitda": safe_float(av_data.get("EnterpriseValueToEBITDA")),
+            "return_on_equity": safe_percent(av_data.get("ReturnOnEquityTTM")),
+            "return_on_assets": safe_percent(av_data.get("ReturnOnAssetsTTM")),
+            "return_on_invested_capital": safe_percent(av_data.get("ReturnOnInvestedCapital")),
+            "profit_margins": safe_percent(av_data.get("ProfitMargin")),
+            "operating_margins": safe_percent(av_data.get("OperatingMarginTTM")),
+            "gross_margins": safe_percent(av_data.get("GrossProfitTTM")),
+            "revenue_growth": safe_percent(av_data.get("QuarterlyRevenueGrowthYOY")),
+            "earnings_growth": safe_percent(av_data.get("QuarterlyEarningsGrowthYOY")),
+            "earnings_quarterly_growth": safe_percent(av_data.get("QuarterlyEarningsGrowthYOY")),
+            "revenue_quarterly_growth": safe_percent(av_data.get("QuarterlyRevenueGrowthYOY")),
+            "asset_turnover": safe_float(av_data.get("AssetTurnover")),
+            "inventory_turnover": safe_float(av_data.get("InventoryTurnover")),
+            "debt_to_equity": safe_float(av_data.get("DebtToEquity")),
+            "current_ratio": safe_float(av_data.get("CurrentRatio")),
+            "quick_ratio": safe_float(av_data.get("QuickRatio")),
+            "total_debt": safe_float(av_data.get("TotalDebt")),
+            "total_cash": safe_float(av_data.get("TotalCash")),
+            "beta": safe_float(av_data.get("Beta")),
+            "currency": av_data.get("Currency", "USD"),
+            "sector": av_data.get("Sector"),
+            "industry": av_data.get("Industry"),
+            "status": "success"
+        }
+    
+    @staticmethod
     def get_fundamentals(ticker: str) -> Dict:
-        """Obtiene análisis fundamental completo"""
+        """Obtiene análisis fundamental completo con fallback a Alpha Vantage"""
         ticker_formatted = format_ticker(ticker)
         cache_key = f"fundamentals:{ticker_formatted}"
         
@@ -30,8 +89,19 @@ class FundamentalsService:
         if cached_data is not None:
             return cached_data
         
-        max_retries = 2  # Reducido a 2 intentos para evitar bloqueos prolongados
-        delay = 5.0  # Aumentado a 5 segundos inicial
+        # PRIMERO: Intentar con Alpha Vantage (más confiable, API oficial)
+        try:
+            av_data = AlphaVantageClient.get_overview(ticker_formatted)
+            if av_data and av_data.get("Symbol"):
+                result = FundamentalsService._convert_alpha_vantage_to_fundamentals(av_data, ticker_formatted)
+                cache.set(cache_key, result, ttl=300)
+                return result
+        except Exception as e:
+            print(f"Alpha Vantage falló: {e}")
+        
+        # SEGUNDO: Si Alpha Vantage falla, intentar con Yahoo Finance (fallback)
+        max_retries = 1  # Solo 1 intento ya que Alpha Vantage es el principal
+        delay = 5.0
         
         for attempt in range(max_retries):
             try:

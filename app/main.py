@@ -37,30 +37,14 @@ async def root():
         "version": settings.APP_VERSION,
         "description": settings.APP_DESCRIPTION,
         "endpoints": {
-            "dividends": "/api/v1/dividends - Consulta información de dividendos",
-            "fundamentals": "/api/v1/stocks/{ticker}/fundamentals - Análisis fundamental completo",
-            "financials": "/api/v1/stocks/{ticker}/financials - Estados financieros",
-            "balance_sheet": "/api/v1/stocks/{ticker}/balance-sheet - Balance general",
-            "cashflow": "/api/v1/stocks/{ticker}/cashflow - Flujo de efectivo",
-            "earnings": "/api/v1/stocks/{ticker}/earnings - Datos de ganancias",
-            "history": "/api/v1/stocks/{ticker}/history - Datos históricos OHLCV",
-            "technical_indicators": "/api/v1/stocks/{ticker}/technical-indicators - Indicadores técnicos",
-            "volatility": "/api/v1/stocks/{ticker}/volatility - Análisis de volatilidad",
-            "performance": "/api/v1/stocks/{ticker}/performance - Análisis de rendimiento",
-            "recommendations": "/api/v1/stocks/{ticker}/recommendations - Recomendaciones de analistas",
-            "news": "/api/v1/stocks/{ticker}/news - Noticias recientes",
-            "calendar": "/api/v1/stocks/{ticker}/calendar - Calendario de eventos",
-            "holders": "/api/v1/stocks/{ticker}/holders - Accionistas",
-            "compare": "/api/v1/stocks/compare?tickers=... - Comparar múltiples acciones",
-            "correlation": "/api/v1/stocks/correlation/{ticker}?compare_tickers=... - Correlación entre acciones",
-            "dividends_history": "/api/v1/stocks/{ticker}/dividends-history - Historial de dividendos",
-            "splits": "/api/v1/stocks/{ticker}/splits - Historial de splits",
-            "summary": "/api/v1/stocks/{ticker}/summary - Resumen completo",
-            "key_metrics": "/api/v1/stocks/{ticker}/key-metrics - Métricas clave",
+            "overview": "/api/v1/stocks/{symbol}/overview - Resumen general de la empresa",
+            "income_statement": "/api/v1/stocks/{symbol}/income-statement - Estado de resultados",
+            "statistics": "/api/v1/stocks/{symbol}/statistics - Estadísticas de mercado y valoración",
             "docs": "/docs - Documentación interactiva (Swagger UI)",
             "redoc": "/redoc - Documentación alternativa (ReDoc)",
             "health": "/health - Health check"
-        }
+        },
+        "note": "Los símbolos deben incluir el prefijo del exchange (ej: NASDAQ:AAPL, BVC:ECOPETROL)"
     }
 
 
