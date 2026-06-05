@@ -12,8 +12,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tradingview_scraper.symbols.cal import CalendarScraper
 from app.scrapers.bvl_scraper import scrape_bvl_dividends
 
-SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-SUPABASE_KEY = os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+SUPABASE_URL          = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+SUPABASE_KEY          = os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_KEY  = os.getenv("SUPABASE_SERVICE_KEY")
 TABLE        = "dividendos_peru"
 BATCH        = 50
 
@@ -147,16 +148,17 @@ def get_preview() -> dict:
 
 # ── Sync a Supabase ───────────────────────────────────────────────────────────
 def _supabase_headers():
+    key = SUPABASE_SERVICE_KEY or SUPABASE_KEY
     return {
-        "apikey"       : SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "apikey"       : key,
+        "Authorization": f"Bearer {key}",
         "Content-Type" : "application/json",
         "Prefer"       : "resolution=merge-duplicates,return=minimal",
     }
 
 
 def sync_to_supabase(tv_rows: list[dict], bvl_rows: list[dict]) -> dict:
-    if not SUPABASE_URL or not SUPABASE_KEY:
+    if not SUPABASE_URL or not (SUPABASE_SERVICE_KEY or SUPABASE_KEY):
         raise RuntimeError("Faltan credenciales Supabase en .env")
 
     url     = f"{SUPABASE_URL}/rest/v1/{TABLE}"
@@ -166,7 +168,7 @@ def sync_to_supabase(tv_rows: list[dict], bvl_rows: list[dict]) -> dict:
         for i in range(0, len(rows), BATCH):
             batch = rows[i:i + BATCH]
             r = http.post(url, json=batch, headers=_supabase_headers(), timeout=30)
-            if r.status_code in (200, 201):
+            if r.status_code in (200, 201, 204):
                 results[fuente] += len(batch)
             else:
                 results["errores"].append(
