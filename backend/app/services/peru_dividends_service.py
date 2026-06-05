@@ -8,8 +8,9 @@ import os
 import datetime
 import requests as http
 import yfinance as yf
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from tradingview_scraper.symbols.cal import CalendarScraper
+from tradingview_scraper.symbols.overview import Overview
 from app.scrapers.bvl_scraper import scrape_bvl_dividends
 
 SUPABASE_URL          = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
@@ -76,17 +77,21 @@ def fetch_tv(tc: float) -> list[dict]:
     return rows
 
 
-# ── Precios BVL via Yahoo Finance (.LM = Lima Stock Exchange) ─────────────────
+# ── Precios BVL via TradingView Overview ──────────────────────────────────────
 def _get_bvl_prices(symbols: list[str]) -> dict[str, float | None]:
-    """Obtiene el último precio de cierre para símbolos de BVL."""
+    """Obtiene el último precio de cierre para símbolos BVL via TradingView Overview."""
     if not symbols:
         return {}
 
+    overview = Overview()
+
     def _fetch(sym: str):
         try:
-            hist = yf.Ticker(f"{sym}.LM").history(period="5d")
-            if not hist.empty:
-                return sym, float(hist["Close"].dropna().iloc[-1])
+            result = overview.get_symbol_overview(symbol=f"BVL:{sym}")
+            if result.get("status") == "success":
+                price = result["data"].get("close")
+                if price:
+                    return sym, float(price)
         except Exception:
             pass
         return sym, None
