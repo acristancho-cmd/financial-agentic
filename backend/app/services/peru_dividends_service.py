@@ -76,18 +76,39 @@ def fetch_tv(tc: float) -> list[dict]:
     return rows
 
 
+# ── Precios BVL via Yahoo Finance (.LM = Lima Stock Exchange) ─────────────────
+def _get_bvl_prices(symbols: list[str]) -> dict[str, float | None]:
+    """Obtiene el último precio de cierre para símbolos de BVL."""
+    if not symbols:
+        return {}
+
+    def _fetch(sym: str):
+        try:
+            hist = yf.Ticker(f"{sym}.LM").history(period="5d")
+            if not hist.empty:
+                return sym, float(hist["Close"].dropna().iloc[-1])
+        except Exception:
+            pass
+        return sym, None
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        return dict(ex.map(_fetch, symbols))
+
+
 # ── Fetch BVL ─────────────────────────────────────────────────────────────────
 def fetch_bvl(tc: float) -> list[dict]:
     rows = []
     for ev in scrape_bvl_dividends():
         if not ev.get("fecha_corte"):
             continue
+        symbol   = ev.get("symbol", "")
         amount   = ev.get("amount")
         currency = ev.get("currency")
         tipo     = ev.get("tipo", "desconocido")
+        monto_pen = _to_pen(amount, currency, tc) if tipo == "efectivo" else None
         rows.append({
-            "symbol"         : ev.get("symbol", ""),
-            "nombre"         : None,
+            "symbol"         : symbol,
+            "nombre"         : symbol,
             "fuente"         : "BVL",
             "fecha_corte"    : ev.get("fecha_corte"),
             "fecha_registro" : ev.get("fecha_registro"),
@@ -96,12 +117,22 @@ def fetch_bvl(tc: float) -> list[dict]:
             "monto_original" : amount,
             "moneda_original": currency,
             "tc_usdpen"      : tc if currency == "USD" else None,
-            "monto_pen"      : _to_pen(amount, currency, tc) if tipo == "efectivo" else None,
+            "monto_pen"      : monto_pen,
             "tipo"           : tipo,
             "en_partes"      : ev.get("fecha_entrega_parcial", False),
             "concepto"       : ev.get("concepto"),
             "yield_tv_pct"   : None,
         })
+
+    # Calcular yield: (monto_pen / precio_actual_pen) * 100
+    candidatos = [r["symbol"] for r in rows if r["tipo"] == "efectivo" and r["monto_pen"]]
+    if candidatos:
+        precios = _get_bvl_prices(candidatos)
+        for r in rows:
+            precio = precios.get(r["symbol"])
+            if precio and precio > 0 and r["monto_pen"]:
+                r["yield_tv_pct"] = round(r["monto_pen"] / precio * 100, 6)
+
     return rows
 
 
