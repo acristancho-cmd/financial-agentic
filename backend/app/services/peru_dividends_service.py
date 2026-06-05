@@ -114,7 +114,12 @@ def get_preview() -> dict:
         fut_tv  = executor.submit(fetch_tv, tc)
         fut_bvl = executor.submit(fetch_bvl, tc)
         tv_rows  = fut_tv.result()
-        bvl_rows = fut_bvl.result()
+        bvl_error = None
+        try:
+            bvl_rows = fut_bvl.result()
+        except Exception as e:
+            bvl_rows  = []
+            bvl_error = str(e)
 
     now = datetime.datetime.now(tz=datetime.timezone.utc)
     tv_syms  = {r["symbol"].split(":")[-1] for r in tv_rows}
@@ -134,6 +139,7 @@ def get_preview() -> dict:
             "total_combinado" : len(tv_rows) + len(bvl_rows),
             "en_ambas_fuentes": sorted(tv_syms & bvl_syms),
         },
+        "bvl_error"      : bvl_error,
         "tradingview"    : tv_rows,
         "bvl"            : bvl_rows,
     }

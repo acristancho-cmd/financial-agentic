@@ -73,8 +73,7 @@ def scrape_bvl_dividends(timeout: int = 15) -> list[dict]:
         resp.raise_for_status()
         resp.encoding = resp.apparent_encoding or "latin-1"
     except Exception as e:
-        print(f"  [BVL scraper] Error al obtener página: {e}")
-        return []
+        raise RuntimeError(f"BVL no disponible: {e}") from e
 
     soup = BeautifulSoup(resp.text, "html.parser")
 
