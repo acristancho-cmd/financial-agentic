@@ -17,8 +17,54 @@ SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 TABLE                = "dividendos_colombia"
 BATCH                = 50
 
+# Whitelist de tickers permitidos para Colombia (BVC).
+# BRK.B se normaliza a BRKB (sin punto) para coincidir con lo que devuelve TV.
+# BVC agrega sufijo "CO" a algunos activos internacionales (MSFTCO, TSLACO...).
+COLOMBIA_TICKER_WHITELIST: frozenset[str] = frozenset({
+    "AGUASACO", "ALICORC1CO", "GOOGL", "AMZN", "AAPL", "PFAVAL",
+    "BHI", "BOGOTA", "CHILECO", "BCICO", "BAC", "BRKB",
+    "BVC", "CNEC", "CAPCO", "CELSIA", "CEMARGOS", "PFCEMARGOS",
+    "CPACASC1CO", "CENCOSUDCO", "CENCOMALCO", "C", "COLBUNCO",
+    "CCUCO", "BVNCO", "VAPORESCO", "CONCONCRET", "EIMI", "CSPX",
+    "CORFICOLCF", "PFCORFICOL", "BAPCO", "PFDAVVNDA", "PFDAVIGRP",
+    "SPXS", "AMDVASCCO", "ECOPETROL", "ANDINABCO", "ENTELCO",
+    "CMPCCO", "COPECCO", "ENELAMCO", "ENELCHILCO", "ECLCO",
+    "ENKA", "ETB", "ICHN", "EXITO", "FALABELLCO", "FERREYC1CO",
+    "F", "GEHC", "GE", "COPX", "LIT", "GXTESCOL", "URA",
+    "GRUPOARGOS", "PFGRUPOARG", "GRUPOAVAL", "GRUBOLIVAR",
+    "CIBEST", "PFCIBEST", "GEB", "NUTRESA", "GRUPOSURA", "PFGRUPOSURA",
+    "HCOLSEL", "HIVECO", "ICOLPCAP", "INRETC1CO", "IFSCO", "IAMCO",
+    "IPCHBC1CO", "EQAC", "SGLD", "ISA", "IUIT", "IB01", "LQDA",
+    "SDIA", "CBU7", "RBOT", "IBIT", "IJPA", "IWVL", "INRA",
+    "D26ACO", "ID27CO", "D28ACO", "ID29CO", "ID30CO",
+    "EMGA", "ISAC", "4BRZ", "IDSE", "SUAS", "I500CO",
+    "IUES", "IUFS", "IUHC", "CFMITNIPCO", "ITAUCLCO", "JPEA",
+    "JNJ", "JPM", "LTMCO", "META", "MSFTCO", "MINEROS",
+    "NKE", "NUAMCO", "NU", "NVDA", "PARAUCOCO", "PEI", "PBR",
+    "PFE", "MALLPLAZCO", "PROMIGAS", "QUINENCOCO", "RIPLEYCO",
+    "BSANTANDCO", "SMUCO", "CVERDEC1CO", "PORT", "SQMBCO",
+    "SCCOCO", "SUM", "TERPEL", "TSLACO", "KOCO", "JETS", "TIN",
+    "GOAUCO", "UBER", "SDHA", "GDXCO", "SMHCO", "VOO",
+    "CONCHATOCO", "VOLCABC1CO",
+    "PFGRUPSURA",   # alias TV de PFGRUPOSURA (Grupo Sura preferencial)
+    "ICOLCAP",      # alias TV de ICOLPCAP (ETF iColcap)
+})
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+def _in_whitelist(ticker: str) -> bool:
+    """Verifica si un ticker está en la whitelist de Colombia.
+    Normaliza puntos (BRK.B -> BRKB) y maneja el sufijo CO que BVC agrega
+    a algunos activos internacionales (GOOGLCO -> GOOGL como red de seguridad).
+    """
+    t = ticker.strip().upper().replace(".", "")
+    if t in COLOMBIA_TICKER_WHITELIST:
+        return True
+    if len(t) > 2 and t.endswith("CO") and t[:-2] in COLOMBIA_TICKER_WHITELIST:
+        return True
+    return False
+
+
 def _ts_to_date(ts) -> str | None:
     if not ts:
         return None
@@ -76,6 +122,10 @@ def fetch_tv_colombia(tc: float) -> list[dict]:
         ex_date = _ts_to_date(ev.get("dividend_ex_date_upcoming")) or \
                   _ts_to_date(ev.get("dividend_ex_date_recent"))
         if not ex_date:
+            continue
+        full_sym = ev.get("full_symbol", "")
+        ticker   = full_sym.split(":")[-1]
+        if not _in_whitelist(ticker):
             continue
         amount   = ev.get("dividend_amount_upcoming") or ev.get("dividend_amount_recent")
         currency = ev.get("fundamental_currency_code", "USD")

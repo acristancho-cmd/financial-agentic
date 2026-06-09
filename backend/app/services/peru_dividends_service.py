@@ -19,8 +19,40 @@ SUPABASE_SERVICE_KEY  = os.getenv("SUPABASE_SERVICE_KEY")
 TABLE        = "dividendos_peru"
 BATCH        = 50
 
+# Whitelist de tickers permitidos — comparar siempre con .strip().upper()
+PERU_TICKER_WHITELIST: frozenset[str] = frozenset({
+    "MMM", "AENZAC1", "ALICORC1", "GOOGL", "AMZN", "AXP", "AIHC1", "AAPL",
+    "T", "AUNA", "CREDITC1", "INTERBC1", "BAC", "ABX", "BBVAC1", "CARTAVC1",
+    "CASAGRC1", "CPACASC1", "CPACASI1", "CDPR", "SNJUANC1", "SNJUANI1",
+    "CSCO", "C", "KO", "BVN", "PODERC1", "CORAREI1", "CORAREC1", "CORLINI1",
+    "BAP", "NUGT", "DIS", "SEA", "HIDRA2C1", "POMALCC1", "SIDERC1", "ENDISPC1",
+    "ENGEPEC1", "ENGIEC1", "FERREYC1", "FIBCCAP", "FIBPRIME", "XLF", "ETFPERUD",
+    "GE", "BOTZ", "GS", "XLV", "HBM", "INRETC1", "INTC", "IFS", "IPCHAC1",
+    "IPCHBC1", "BTCO", "QQQ", "IBIT", "IBHD", "IBTE", "ILF", "EEM", "EWJ",
+    "IYR", "JNJ", "JPM", "GLORIAI1", "LUSURC1", "META", "MSFT", "ATACOBC1",
+    "MINSURI1", "EPU", "NFLX", "NEXAPEC1", "NVDA", "ORYGENC1", "PML", "PYPL",
+    "ETFPESOV", "EXALMC1", "PFE", "PLUZENC1", "PPX", "BTCCU", "RIO", "SPY",
+    "CRM", "SMT", "AGMR", "CVERDEC1", "BROCALC1", "SCCO", "SPCCPI1", "DIA",
+    "GLD", "SBUX", "TMUS", "XLK", "TSLA", "PG", "JETS", "GOAU", "UNACEMC1",
+    "BACKUSI1", "USO", "HODL", "DFNS", "GDX", "MOAT", "SMH", "NLR", "VEA",
+    "VWO", "VZ", "V", "VOLCABC1", "WMT", "ZM",
+})
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+def _in_whitelist(ticker: str) -> bool:
+    """Verifica si un ticker está en la whitelist.
+    BVL/TV agrega sufijo 'US' a acciones listadas en EEUU (GOOGLUS -> GOOGL).
+    Se comprueba el ticker directo y, si termina en 'US', también sin el sufijo.
+    """
+    t = ticker.strip().upper()
+    if t in PERU_TICKER_WHITELIST:
+        return True
+    if len(t) > 2 and t.endswith("US") and t[:-2] in PERU_TICKER_WHITELIST:
+        return True
+    return False
+
+
 def _ts_to_date(ts) -> str | None:
     if not ts:
         return None
@@ -55,6 +87,10 @@ def fetch_tv(tc: float) -> list[dict]:
         ex_date = _ts_to_date(ev.get("dividend_ex_date_upcoming")) or \
                   _ts_to_date(ev.get("dividend_ex_date_recent"))
         if not ex_date:
+            continue
+        full_sym = ev.get("full_symbol", "")
+        ticker   = full_sym.split(":")[-1]
+        if not _in_whitelist(ticker):
             continue
         amount   = ev.get("dividend_amount_upcoming") or ev.get("dividend_amount_recent")
         currency = ev.get("fundamental_currency_code", "USD")
@@ -106,7 +142,9 @@ def fetch_bvl(tc: float) -> list[dict]:
     for ev in scrape_bvl_dividends():
         if not ev.get("fecha_corte"):
             continue
-        symbol   = ev.get("symbol", "")
+        symbol = ev.get("symbol", "")
+        if not _in_whitelist(symbol):
+            continue
         amount   = ev.get("amount")
         currency = ev.get("currency")
         tipo     = ev.get("tipo", "desconocido")
