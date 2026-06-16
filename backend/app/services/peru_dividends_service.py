@@ -113,9 +113,9 @@ def fetch_tv(tc: float) -> list[dict]:
     return rows
 
 
-# ── Precios BVL via TradingView Overview ──────────────────────────────────────
-def _get_bvl_prices(symbols: list[str]) -> dict[str, float | None]:
-    """Obtiene el último precio de cierre para símbolos BVL via TradingView Overview."""
+# ── Info BVL via TradingView Overview (precio + nombre) ───────────────────────
+def _get_bvl_info(symbols: list[str]) -> dict[str, dict]:
+    """Retorna {symbol: {price, nombre}} para símbolos BVL via TradingView Overview."""
     if not symbols:
         return {}
 
@@ -125,12 +125,13 @@ def _get_bvl_prices(symbols: list[str]) -> dict[str, float | None]:
         try:
             result = overview.get_symbol_overview(symbol=f"BVL:{sym}")
             if result.get("status") == "success":
-                price = result["data"].get("close")
-                if price:
-                    return sym, float(price)
+                data   = result["data"]
+                price  = data.get("close")
+                nombre = data.get("description") or sym
+                return sym, {"price": float(price) if price else None, "nombre": nombre}
         except Exception:
             pass
-        return sym, None
+        return sym, {"price": None, "nombre": sym}
 
     with ThreadPoolExecutor(max_workers=8) as ex:
         return dict(ex.map(_fetch, symbols))
@@ -151,7 +152,7 @@ def fetch_bvl(tc: float) -> list[dict]:
         monto_pen = _to_pen(amount, currency, tc) if tipo == "efectivo" else None
         rows.append({
             "symbol"         : symbol,
-            "nombre"         : symbol,
+            "nombre"         : symbol,          # se sobreescribe abajo con nombre real
             "fuente"         : "BVL",
             "fecha_corte"    : ev.get("fecha_corte"),
             "fecha_registro" : ev.get("fecha_registro"),
@@ -167,14 +168,31 @@ def fetch_bvl(tc: float) -> list[dict]:
             "yield_tv_pct"   : None,
         })
 
-    # Calcular yield: (monto_pen / precio_actual_pen) * 100
-    candidatos = [r["symbol"] for r in rows if r["tipo"] == "efectivo" and r["monto_pen"]]
-    if candidatos:
-        precios = _get_bvl_prices(candidatos)
-        for r in rows:
-            precio = precios.get(r["symbol"])
-            if precio and precio > 0 and r["monto_pen"]:
-                r["yield_tv_pct"] = round(r["monto_pen"] / precio * 100, 6)
+    # Deduplicar por (symbol, fecha_corte): sumar montos, concatenar conceptos
+    merged: dict[tuple, dict] = {}
+    for r in rows:
+        key = (r["symbol"], r["fecha_corte"])
+        if key not in merged:
+            merged[key] = r.copy()
+        else:
+            existing = merged[key]
+            if r["monto_original"] is not None and existing["monto_original"] is not None:
+                existing["monto_original"] = round(existing["monto_original"] + r["monto_original"], 8)
+            if r["monto_pen"] is not None and existing["monto_pen"] is not None:
+                existing["monto_pen"] = round(existing["monto_pen"] + r["monto_pen"], 6)
+            if r["concepto"] and existing["concepto"]:
+                existing["concepto"] = existing["concepto"] + " + " + r["concepto"]
+    rows = list(merged.values())
+
+    # Obtener nombre real y precio desde TradingView Overview
+    symbols_uniq = list({r["symbol"] for r in rows})
+    info = _get_bvl_info(symbols_uniq)
+    for r in rows:
+        data = info.get(r["symbol"], {})
+        r["nombre"] = data.get("nombre") or r["symbol"]
+        precio = data.get("price")
+        if precio and precio > 0 and r["monto_pen"] and r["tipo"] == "efectivo":
+            r["yield_tv_pct"] = round(r["monto_pen"] / precio * 100, 6)
 
     return rows
 
