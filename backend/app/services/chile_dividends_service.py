@@ -164,7 +164,7 @@ def fetch_tv_chile(tc: float) -> list[dict]:
         markets=["chile"],
     )
 
-    rows = []
+    seen: dict[tuple, dict] = {}
     for ev in raw:
         ex_date = _ts_to_date(ev.get("dividend_ex_date_upcoming")) or \
                   _ts_to_date(ev.get("dividend_ex_date_recent"))
@@ -174,10 +174,13 @@ def fetch_tv_chile(tc: float) -> list[dict]:
         ticker   = full_sym.split(":")[-1]
         if not _in_whitelist(ticker):
             continue
+        key = (full_sym, ex_date)
+        if key in seen:
+            continue
         amount    = ev.get("dividend_amount_upcoming") or ev.get("dividend_amount_recent")
         currency  = ev.get("fundamental_currency_code", "USD")
         monto_clp = _to_clp(amount, currency, tc)
-        rows.append({
+        seen[key] = {
             "symbol"         : full_sym,
             "nombre"         : ev.get("name") or ev.get("description"),
             "fuente"         : "TV",
@@ -192,7 +195,8 @@ def fetch_tv_chile(tc: float) -> list[dict]:
             "en_partes"      : False,
             "concepto"       : None,
             "yield_tv_pct"   : ev.get("dividends_yield"),
-        })
+        }
+    rows = list(seen.values())
 
     # Para los sin yield en TV, calcular con precio CLP de Overview
     sin_yield = [
