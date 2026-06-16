@@ -82,7 +82,7 @@ def fetch_tv(tc: float) -> list[dict]:
         markets=["peru"],
     )
 
-    rows = []
+    seen: dict[tuple, dict] = {}
     for ev in raw:
         ex_date = _ts_to_date(ev.get("dividend_ex_date_upcoming")) or \
                   _ts_to_date(ev.get("dividend_ex_date_recent"))
@@ -92,10 +92,13 @@ def fetch_tv(tc: float) -> list[dict]:
         ticker   = full_sym.split(":")[-1]
         if not _in_whitelist(ticker):
             continue
+        key = (full_sym, ex_date)
+        if key in seen:
+            continue
         amount   = ev.get("dividend_amount_upcoming") or ev.get("dividend_amount_recent")
         currency = ev.get("fundamental_currency_code", "USD")
-        rows.append({
-            "symbol"         : ev.get("full_symbol", ""),
+        seen[key] = {
+            "symbol"         : full_sym,
             "nombre"         : ev.get("name") or ev.get("description"),
             "fuente"         : "TV",
             "fecha_corte"    : ex_date,
@@ -109,8 +112,8 @@ def fetch_tv(tc: float) -> list[dict]:
             "en_partes"      : False,
             "concepto"       : None,
             "yield_tv_pct"   : ev.get("dividends_yield"),
-        })
-    return rows
+        }
+    return list(seen.values())
 
 
 # ── Info BVL via TradingView Overview (precio + nombre) ───────────────────────
