@@ -38,6 +38,140 @@ PERU_TICKER_WHITELIST: frozenset[str] = frozenset({
     "VWO", "VZ", "V", "VOLCABC1", "WMT", "ZM",
 })
 
+# Nombres completos por ticker (fuente: whitelist oficial)
+NOMBRES_PERU: dict[str, str] = {
+    "MMM":      "3M Company",
+    "AENZAC1":  "Aenza",
+    "ALICORC1": "Alicorp",
+    "GOOGL":    "Alphabet Inc.",
+    "AMZN":     "Amazon",
+    "AXP":      "American Express",
+    "AIHC1":    "Andino Investment Holding S.A.A.",
+    "AAPL":     "Apple",
+    "T":        "AT&T Inc",
+    "AUNA":     "Auna S.A.",
+    "CREDITC1": "Banco de Crédito del Perú",
+    "INTERBC1": "Banco Internacional del Perú",
+    "BAC":      "Bank of America Corporation",
+    "ABX":      "Barrick",
+    "BBVAC1":   "BBVA Perú",
+    "CARTAVC1": "Cartavio Sociedad Anónima Abierta",
+    "CASAGRC1": "Casa Grande",
+    "CPACASC1": "Cementos Pacasmayo",
+    "CPACASI1": "Cementos Pacasmayo S.A.A.",
+    "CDPR":     "Cerro de Pasco Resources Inc.",
+    "SNJUANC1": "Cervecería San Juan S.A.",
+    "SNJUANI1": "Cervecería San Juan S.A.",
+    "CSCO":     "Cisco Systems",
+    "C":        "Citigroup",
+    "KO":       "Coca Cola Co.",
+    "BVN":      "Compañía de Minas Buenaventura",
+    "PODERC1":  "Compañía Minera Poderosa S.A.",
+    "CORAREI1": "Corporación Aceros Arequipa",
+    "CORAREC1": "Corporación Aceros Arequipa S.A.",
+    "CORLINI1": "Corporación Lindley SA",
+    "BAP":      "Credicorp Ltd",
+    "NUGT":     "Direxion Daily Gold Miners",
+    "DIS":      "Disney",
+    "SEA":      "U.S. Global Sea to Sky Cargo ETF",
+    "HIDRA2C1": "Hidrandina",
+    "POMALCC1": "Empresa Agroindustrial Pomalca S.A.A.",
+    "SIDERC1":  "Empresa Siderúrgica del Perú",
+    "ENDISPC1": "Enel Distribución Perú",
+    "ENGEPEC1": "Enel Generación Perú",
+    "ENGIEC1":  "Engie Energía Perú",
+    "FERREYC1": "Ferreycorp",
+    "FIBCCAP":  "Fibra Credicorp",
+    "FIBPRIME": "FIBRA Prime",
+    "XLF":      "Financial Select Sec SPDR ETF",
+    "ETFPERUD": "Fondo Bursátil VanEck el Dorado ETF",
+    "GE":       "General Electric Company",
+    "BOTZ":     "Global X Robotics & A.I. ETF",
+    "GS":       "Goldman Sachs Group Inc.",
+    "CSPFIBPR": "Grupo Coril Sociedad Titulizadora S.A.",
+    "XLV":      "Health Care Sel Sect SPDR Fund",
+    "HBM":      "HudBay Minerals Inc",
+    "INRETC1":  "InRetail Perú",
+    "INTC":     "Intel Corporation",
+    "IFS":      "Intercorp Financial Services Inc",
+    "IPCHAC1":  "Inversiones Portuarias Chancay S.A.A.",
+    "IPCHBC1":  "Inversiones Portuarias Chancay S.A.A.",
+    "BTCO":     "Invesco Galaxy Bitcoin ETF",
+    "QQQ":      "Invesco QQQ Trust, Series 1",
+    "IBIT":     "iShares Bitcoin Trust",
+    "IBHD":     "iShares iBonds 2024 Term High Yield and Income ETF",
+    "IBTE":     "iShares iBonds Dec 2024 Term Treasury ETF",
+    "ILF":      "iShares Latin America 40 ETF",
+    "EEM":      "iShares MSCI Emerging Mkts ETF",
+    "EWJ":      "iShares MSCI Japan ETF",
+    "IYR":      "iShares US Real Estate ETF",
+    "JNJ":      "Johnson & Johnson",
+    "JPM":      "JPMorgan Chase & Co.",
+    "GLORIAI1": "Leche Gloria S.A.",
+    "LUSURC1":  "Luz del Sur",
+    "META":     "Meta Platforms",
+    "MSFT":     "Microsoft Corporation",
+    "ATACOBC1": "Minera Atacocha",
+    "MINSURI1": "Minsur",
+    "EPU":      "MSCI All Perú Capp ETF",
+    "NFLX":     "Netflix, Inc.",
+    "NEXAPEC1": "Nexa Resources Perú S.A.A.",
+    "NVDA":     "NVIDIA Corporation",
+    "ORYGENC1": "Orygen Perú S.A.A",
+    "PML":      "Panoro Minerals Ltd.",
+    "PYPL":     "PayPal Holdings, Inc.",
+    "ETFPESOV": "Perú Soberano VanEck El Dorado ID ETF",
+    "EXALMC1":  "Pesquera Exalmar S.A.A.",
+    "PFE":      "Pfizer",
+    "PLUZENC1": "Pluz Energía Perú S.A.A",
+    "PPX":      "PPX Mining Corp.",
+    "BTCCU":    "Purpose Bitcoin USD ETF Non-Currency Hedged",
+    "RIO":      "Rio2 Limited",
+    "SPY":      "S&P 500 ETF Trust",
+    "CRM":      "Salesforce",
+    "SMT":      "Sierra Metals Inc.",
+    "AGMR":     "Silver Mountain Resources Ord Shs",
+    "CVERDEC1": "Sociedad Minera Cerro Verde",
+    "BROCALC1": "Sociedad Minera el Brocal",
+    "SCCO":     "Southern Copper Corporation",
+    "SPCCPI1":  "Southern Peru Copper Corporation - Sucursal Del Peru",
+    "DIA":      "SPDR Dow Jones ETF Trust",
+    "GLD":      "SPDR Gold Trust",
+    "SBUX":     "Starbucks Corp",
+    "TMUS":     "T-Mobile US Inc.",
+    "XLK":      "Technology Select Sec SPDR Fund",
+    "TSLA":     "Tesla",
+    "PG":       "The Procter & Gamble Company",
+    "JETS":     "The U.S. Global Jets",
+    "GOAU":     "U.S. Global GO GOLD",
+    "UNACEMC1": "Unión Andina de Cementos",
+    "BACKUSI1": "Unión de Cervecerías Peruanas",
+    "USO":      "United States Oil Fund, LP",
+    "HODL":     "VanEck Bitcoin Trust",
+    "DFNS":     "VanEck Defense UCITS",
+    "GDX":      "VanEck Gold Miners ETF",
+    "MOAT":     "VanEck Morningstar Wide Moat ETF",
+    "SMH":      "VanEck Semiconductor ETF",
+    "NLR":      "VanEck Uranium and Nuclear ETF",
+    "VEA":      "Vanguard FTSE Developed Mkts ETF",
+    "VWO":      "Vanguard FTSE Emerging Mkts ETF",
+    "VZ":       "Verizon Communications Inc.",
+    "V":        "Visa Inc.",
+    "VOLCABC1": "Volcán Compañía Minera",
+    "WMT":      "Walmart Inc.",
+    "ZM":       "Zoom Video Communications, Inc",
+}
+
+
+def _get_nombre_peru(ticker: str) -> str | None:
+    """Nombre desde dict estático. Si el ticker termina en 'US', prueba sin el sufijo."""
+    t = ticker.strip().upper()
+    if t in NOMBRES_PERU:
+        return NOMBRES_PERU[t]
+    if len(t) > 2 and t.endswith("US") and t[:-2] in NOMBRES_PERU:
+        return NOMBRES_PERU[t[:-2]]
+    return None
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _in_whitelist(ticker: str) -> bool:
@@ -99,7 +233,7 @@ def fetch_tv(tc: float) -> list[dict]:
         currency = ev.get("fundamental_currency_code", "USD")
         seen[key] = {
             "symbol"         : full_sym,
-            "nombre"         : ev.get("name") or ev.get("description"),
+            "nombre"         : _get_nombre_peru(ticker) or ev.get("name") or ev.get("description"),
             "fuente"         : "TV",
             "fecha_corte"    : ex_date,
             "fecha_pago"     : _ts_to_date(ev.get("dividend_payment_date_upcoming")) or
@@ -116,9 +250,9 @@ def fetch_tv(tc: float) -> list[dict]:
     return list(seen.values())
 
 
-# ── Info BVL via TradingView Overview (precio + nombre) ───────────────────────
-def _get_bvl_info(symbols: list[str]) -> dict[str, dict]:
-    """Retorna {symbol: {price, nombre}} para símbolos BVL via TradingView Overview."""
+# ── Precios BVL via TradingView Overview ──────────────────────────────────────
+def _get_bvl_prices(symbols: list[str]) -> dict[str, float | None]:
+    """Precio de cierre para símbolos BVL via TradingView Overview (solo para yield)."""
     if not symbols:
         return {}
 
@@ -128,13 +262,12 @@ def _get_bvl_info(symbols: list[str]) -> dict[str, dict]:
         try:
             result = overview.get_symbol_overview(symbol=f"BVL:{sym}")
             if result.get("status") == "success":
-                data   = result["data"]
-                price  = data.get("close")
-                nombre = data.get("description") or sym
-                return sym, {"price": float(price) if price else None, "nombre": nombre}
+                price = result["data"].get("close")
+                if price:
+                    return sym, float(price)
         except Exception:
             pass
-        return sym, {"price": None, "nombre": sym}
+        return sym, None
 
     with ThreadPoolExecutor(max_workers=8) as ex:
         return dict(ex.map(_fetch, symbols))
@@ -155,7 +288,7 @@ def fetch_bvl(tc: float) -> list[dict]:
         monto_pen = _to_pen(amount, currency, tc) if tipo == "efectivo" else None
         rows.append({
             "symbol"         : symbol,
-            "nombre"         : symbol,          # se sobreescribe abajo con nombre real
+            "nombre"         : NOMBRES_PERU.get(symbol, symbol),
             "fuente"         : "BVL",
             "fecha_corte"    : ev.get("fecha_corte"),
             "fecha_registro" : ev.get("fecha_registro"),
@@ -187,15 +320,14 @@ def fetch_bvl(tc: float) -> list[dict]:
                 existing["concepto"] = existing["concepto"] + " + " + r["concepto"]
     rows = list(merged.values())
 
-    # Obtener nombre real y precio desde TradingView Overview
-    symbols_uniq = list({r["symbol"] for r in rows})
-    info = _get_bvl_info(symbols_uniq)
-    for r in rows:
-        data = info.get(r["symbol"], {})
-        r["nombre"] = data.get("nombre") or r["symbol"]
-        precio = data.get("price")
-        if precio and precio > 0 and r["monto_pen"] and r["tipo"] == "efectivo":
-            r["yield_tv_pct"] = round(r["monto_pen"] / precio * 100, 6)
+    # Calcular yield: (monto_pen / precio_actual_pen) * 100
+    candidatos = [r["symbol"] for r in rows if r["tipo"] == "efectivo" and r["monto_pen"]]
+    if candidatos:
+        precios = _get_bvl_prices(candidatos)
+        for r in rows:
+            precio = precios.get(r["symbol"])
+            if precio and precio > 0 and r["monto_pen"]:
+                r["yield_tv_pct"] = round(r["monto_pen"] / precio * 100, 6)
 
     return rows
 
