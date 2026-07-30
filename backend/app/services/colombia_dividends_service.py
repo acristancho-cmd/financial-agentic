@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from openpyxl import load_workbook
 # from tradingview_scraper.symbols.cal import CalendarScraper  # ya no se usa: dividendos vienen del boletín oficial BVC
 from tradingview_scraper.symbols.overview import Overview
+from tradingview_scraper.symbols.symbol_markets import SymbolMarkets
 
 SUPABASE_URL         = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY         = os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
@@ -248,22 +249,71 @@ def get_tc_usdcop() -> float:
 
 
 # ── Precios BVC via TradingView Overview ──────────────────────────────────────
-def _get_bvc_prices(symbols: list[str]) -> dict[str, float | None]:
-    """Precio actual en COP para stocks BVC sin yield en TV."""
+_US_EXCHANGE_PRIORITY = ("NYSE", "NASDAQ", "AMEX")
+
+
+def _resolve_mgc_symbol(ticker: str) -> str | None:
+    """Referencias del Mercado Global Colombiano (ticker extranjero + sufijo 'CO',
+    ej. GECO->GE, JPMCO->JPM) no tienen feed propio bajo BVC: en TradingView —
+    son solo el reenvío de la bolsa de origen. Se resuelve el símbolo real
+    buscando el ticker sin el sufijo y filtrando por coincidencia exacta."""
+    if not (len(ticker) > 2 and ticker.endswith("CO")):
+        return None
+    stripped = ticker[:-2]
+
+    try:
+        candidates = SymbolMarkets().scrape(symbol=stripped).get("data") or []
+    except Exception:
+        return None
+
+    matches = [
+        c for c in candidates
+        if c.get("type") == "stock" and c.get("symbol", "").split(":")[-1].upper() == stripped.upper()
+    ]
+    if not matches:
+        return None
+
+    for exch in _US_EXCHANGE_PRIORITY:
+        for c in matches:
+            if c.get("exchange") == exch:
+                return c["symbol"]
+
+    matches.sort(key=lambda c: c.get("market_cap_basic") or 0, reverse=True)
+    return matches[0]["symbol"]
+
+
+def _get_bvc_prices(symbols: list[str]) -> dict[str, dict]:
+    """Precio actual para tickers de Colombia. Intenta primero BVC:{sym} (precio en COP);
+    si no existe (referencias MGC como GECO/JPMCO), resuelve el símbolo real en su bolsa
+    de origen (NYSE/NASDAQ/...), cuyo precio viene en la moneda nativa de esa bolsa, no en COP.
+    Se marca `is_cop` para que el cálculo de yield use el monto en la moneda correcta."""
     if not symbols:
         return {}
 
     overview = Overview()
 
-    def _fetch(sym: str):
+    def _price_of(symbol: str) -> float | None:
         try:
-            result = overview.get_symbol_overview(symbol=f"BVC:{sym}")
+            result = overview.get_symbol_overview(symbol=symbol)
             if result.get("status") == "success":
                 price = result["data"].get("close")
                 if price:
-                    return sym, float(price)
+                    return float(price)
         except Exception:
             pass
+        return None
+
+    def _fetch(sym: str):
+        price = _price_of(f"BVC:{sym}")
+        if price is not None:
+            return sym, {"price": price, "is_cop": True}
+
+        resolved = _resolve_mgc_symbol(sym)
+        if resolved:
+            price = _price_of(resolved)
+            if price is not None:
+                return sym, {"price": price, "is_cop": False}
+
         return sym, None
 
     with ThreadPoolExecutor(max_workers=8) as ex:
@@ -632,10 +682,16 @@ def fetch_bvc_colombia() -> list[dict]:
     if tickers:
         precios = _get_bvc_prices(tickers)
         for r in rows:
-            if r["monto_cop"]:
-                precio = precios.get(r["symbol"].split(":")[-1])
-                if precio and precio > 0:
-                    r["yield_tv_pct"] = round(r["monto_cop"] / precio * 100, 6)
+            if not r["monto_cop"]:
+                continue
+            info = precios.get(r["symbol"].split(":")[-1])
+            if not info or not info["price"] or info["price"] <= 0:
+                continue
+            # BVC:{ticker} da precio en COP -> comparar contra monto_cop.
+            # Resuelto en bolsa extranjera (NYSE/NASDAQ/...) -> precio en moneda
+            # nativa de esa bolsa, que es la misma que moneda_original del boletín.
+            numerador = r["monto_cop"] if info["is_cop"] else r["monto_original"]
+            r["yield_tv_pct"] = round(numerador / info["price"] * 100, 6)
 
     return rows
 
