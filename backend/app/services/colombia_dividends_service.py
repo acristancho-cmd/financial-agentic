@@ -682,8 +682,12 @@ def _month_range(end_year: int, end_month: int, n_months: int) -> tuple[datetime
 
 
 def _parse_bvc_sheet(ws, header_row: int, col: dict, start_date: datetime.date, end_date: datetime.date) -> list[dict]:
-    """Recorre TODAS las filas de una hoja (no solo las del rango) porque una cuota
-    futura puede caer dentro del rango pedido aunque la fila la anuncie desde antes."""
+    """Recorre todas las filas de la hoja (no solo las ancladas al rango: la fecha
+    ex-dividendo REAL de la fila puede quedar "vieja" — ej. la primera cuota de un
+    dividendo de todo el año — aunque otra de sus cuotas sí caiga en el rango).
+    Regla: se separan las cuotas primero; si AL MENOS UNA cae en el rango, se
+    devuelven TODAS las cuotas de esa fila juntas, para no partir un dividendo
+    a la mitad. Si ninguna cuota cae en el rango, la fila completa se descarta."""
     fecha_pago_idx = col.get("fecha_pago", col.get("fecha_ex_final"))
     rows: list[dict] = []
     # +2: la hoja tiene header en español seguido de header en inglés antes de los datos
@@ -718,10 +722,14 @@ def _parse_bvc_sheet(ws, header_row: int, col: dict, start_date: datetime.date, 
         descripcion = str(descripcion).strip() if descripcion else None
         fecha_pago = _cell_to_date(values[fecha_pago_idx]) if fecha_pago_idx is not None and fecha_pago_idx < len(values) else None
 
-        for cuota in _split_cuotas(fecha_ex, fecha_pago, valor_total or valor_cuota, valor_cuota, descripcion):
-            cuota_ex_dt = datetime.date.fromisoformat(cuota["fecha_ex"])
-            if not (start_date <= cuota_ex_dt <= end_date):
-                continue
+        cuotas = _split_cuotas(fecha_ex, fecha_pago, valor_total or valor_cuota, valor_cuota, descripcion)
+        any_in_range = any(
+            start_date <= datetime.date.fromisoformat(c["fecha_ex"]) <= end_date for c in cuotas
+        )
+        if not any_in_range:
+            continue
+
+        for cuota in cuotas:
             rows.append({
                 "ticker"     : ticker,
                 "emisor"     : str(emisor).strip() if emisor else None,
