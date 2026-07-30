@@ -1,7 +1,9 @@
 """
 Servicio de dividendos Colombia: boletín oficial BVC (Fechas Exdividendo) + precio TradingView.
 Dividendos: boletín "Fechas Exdividendo" de BVC (CMS Hygraph -> XLSX oficial),
-filtrado al mes calendario actual (mes que contiene la fecha de hoy, completo).
+filtrado a los últimos 3 meses calendario completos (incluye el actual). Los
+dividendos pagados en varias cuotas se separan en una fila por cuota (ver
+_split_cuotas), cada una con su propio monto y fecha ex-dividendo.
 Precio (solo para calcular yield): TradingView Overview — es lo único que se sigue
 consultando en TV; el calendario de dividendos de TV (fetch_tv_colombia) quedó abajo comentado.
 Moneda base: COP. Cada moneda que traiga el boletín se convierte a COP con su propia tasa FX.
@@ -576,24 +578,113 @@ def _find_bvc_header_row(ws) -> tuple[int, dict[str, int]]:
     raise RuntimeError("No se encontró la fila de headers (NEMOTECNICO) en el boletín BVC")
 
 
-def _parse_bvc_month(xlsx_bytes: bytes, year: int, month: int) -> list[dict]:
-    """Lee la hoja del año y devuelve filas cuya fecha ex-dividendo cae en ese mes completo."""
-    wb = load_workbook(io.BytesIO(xlsx_bytes), data_only=True, read_only=True)
-    sheet_name = f"FECHAS EX-DIVIDENDO {year}"
-    if sheet_name not in wb.sheetnames:
-        wb.close()
-        return []
+# ── Dividendos en varias cuotas (ej. "PAGADEROS EN DOS CUOTAS 29JUL Y 18DIC") ──
+# La fila del boletín solo trae la cuota MÁS PRÓXIMA (fecha ex-dividendo real,
+# VALOR CUOTA real). Las demás cuotas solo aparecen descritas en texto libre, con
+# su fecha de PAGO (no de ex-dividendo). Por eso la fecha ex-dividendo de las
+# cuotas 2+ es una estimación (mismo offset ex->pago que la cuota real conocida).
+_MESES_ES = {
+    "ENE": 1, "FEB": 2, "MAR": 3, "ABR": 4, "MAY": 5, "JUN": 6,
+    "JUL": 7, "AGO": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DIC": 12,
+}
+_NUM_CUOTAS_ES = {
+    "UNA": 1, "UNO": 1, "DOS": 2, "TRES": 3, "CUATRO": 4, "CINCO": 5, "SEIS": 6, "SIETE": 7,
+}
+_N_CUOTAS_RE = re.compile(r'(\d{1,2}|UNA|UNO|DOS|TRES|CUATRO|CINCO|SEIS|SIETE)\s+CUOTAS?', re.IGNORECASE)
+_MES_ABR = "ENE|FEB|MAR|ABR|MAY|JUN|JUL|AGO|SEP|OCT|NOV|DIC"
+# Entre el monto y la fecha SIEMPRE debe haber moneda y/o "EL" — si no, "29JUL" se
+# puede partir por backtracking en monto="2" + día="9" (bug real, ya visto con GEB).
+_MONTO_FECHA_RE = re.compile(
+    rf'([\d]+(?:[.,]\d+)?)\s*(?:(?:COP|USD|CLP|PEN)\s*(?:EL\s*)?|EL\s*)(\d{{1,2}})\s*(?:DE\s+)?({_MES_ABR})\s*/?\s*(\d{{2,4}})?',
+    re.IGNORECASE,
+)
+# "EL" es opcional aquí porque BVC a veces escribe "29JUL Y 18DIC" sin "EL" (ej. GEB);
+# sin un monto por delante no hay ambigüedad de backtracking como en el regex de arriba.
+# "DE" opcional cubre "16 DE DICIEMBRE" (nombre de mes completo, no solo abreviado).
+_FECHA_SOLA_RE = re.compile(rf'(?:EL\s*)?(\d{{1,2}})\s*(?:DE\s+)?({_MES_ABR})\s*/?\s*(\d{{2,4}})?', re.IGNORECASE)
 
-    ws = wb[sheet_name]
-    header_row, col = _find_bvc_header_row(ws)
-    if "ticker" not in col or "fecha_ex" not in col:
-        wb.close()
-        raise RuntimeError(f"Headers inesperados en la hoja '{sheet_name}' del boletín BVC")
 
-    month_start = datetime.date(year, month, 1)
-    month_end = datetime.date(year, month, calendar.monthrange(year, month)[1])
+def _resolve_cuota_year(month: int, ref_year: int, ref_month: int, explicit_year: str | None) -> int:
+    if explicit_year:
+        y = int(explicit_year)
+        return 2000 + y if y < 100 else y
+    return ref_year + 1 if month < ref_month else ref_year
+
+
+def _dates_from_matches(matches: list[tuple], ref_date: datetime.date) -> list[datetime.date]:
+    out = []
+    ref_year, ref_month = ref_date.year, ref_date.month
+    for m in matches:
+        day = int(m[-3])
+        month = _MESES_ES[m[-2].upper()]
+        year = _resolve_cuota_year(month, ref_year, ref_month, m[-1] or None)
+        out.append(datetime.date(year, month, day))
+        ref_year, ref_month = year, month
+    return out
+
+
+def _split_cuotas(fecha_ex: str, fecha_pago: str | None, valor_total: float, valor_cuota: float,
+                   descripcion: str | None) -> list[dict]:
+    """Si la descripción menciona varias cuotas con sus propias fechas de pago,
+    devuelve una entrada por cuota (fecha_ex real para la primera, estimada para
+    las siguientes; monto de cada cuota, no el total). Si no se puede separar con
+    confianza (formato de texto no reconocido, o reparto ambiguo con 3+ cuotas sin
+    monto propio), devuelve una sola fila con VALOR CUOTA — nunca con el total."""
+    base = [{"fecha_ex": fecha_ex, "fecha_pago": fecha_pago, "monto": valor_cuota}]
+    if not descripcion:
+        return base
+
+    n_match = _N_CUOTAS_RE.search(descripcion)
+    if not n_match:
+        return base
+    raw_n = n_match.group(1).upper()
+    n_cuotas = int(raw_n) if raw_n.isdigit() else _NUM_CUOTAS_ES.get(raw_n)
+    if not n_cuotas or n_cuotas < 2:
+        return base
+
+    ex_dt = datetime.date.fromisoformat(fecha_ex)
+    pago_dt = datetime.date.fromisoformat(fecha_pago) if fecha_pago else ex_dt
+    offset_days = (pago_dt - ex_dt).days
+
+    monto_matches = _MONTO_FECHA_RE.findall(descripcion)
+    if len(monto_matches) == n_cuotas:
+        pay_dates = _dates_from_matches(monto_matches, ex_dt)
+        montos = [float(m[0].replace(",", ".")) for m in monto_matches]
+    else:
+        fecha_matches = _FECHA_SOLA_RE.findall(descripcion)
+        if len(fecha_matches) != n_cuotas:
+            return base  # texto no reconocido: no se arriesga a repartir mal
+        pay_dates = _dates_from_matches(fecha_matches, ex_dt)
+        reparto_igual = "IGUAL" in descripcion.upper() or (
+            valor_total and abs(valor_total / n_cuotas - valor_cuota) < max(0.01, valor_cuota * 0.01)
+        )
+        if reparto_igual:
+            montos = [round(valor_total / n_cuotas, 4)] * n_cuotas
+        elif n_cuotas == 2:
+            montos = [valor_cuota, round(valor_total - valor_cuota, 4)]
+        else:
+            return base  # 3+ cuotas desiguales sin monto propio: no hay dato confiable
+
+    rows = [{"fecha_ex": fecha_ex, "fecha_pago": fecha_pago, "monto": valor_cuota}]
+    for pay_dt, monto in list(zip(pay_dates, montos))[1:]:
+        ex_i = pay_dt - datetime.timedelta(days=offset_days)
+        rows.append({"fecha_ex": ex_i.isoformat(), "fecha_pago": pay_dt.isoformat(), "monto": monto})
+    return rows
+
+
+def _month_range(end_year: int, end_month: int, n_months: int) -> tuple[datetime.date, datetime.date]:
+    """Rango de n_months meses calendario completos, terminando en end_year-end_month."""
+    end_date = datetime.date(end_year, end_month, calendar.monthrange(end_year, end_month)[1])
+    start_index = (end_year * 12 + (end_month - 1)) - (n_months - 1)
+    start_year, start_month0 = divmod(start_index, 12)
+    start_date = datetime.date(start_year, start_month0 + 1, 1)
+    return start_date, end_date
+
+
+def _parse_bvc_sheet(ws, header_row: int, col: dict, start_date: datetime.date, end_date: datetime.date) -> list[dict]:
+    """Recorre TODAS las filas de una hoja (no solo las del rango) porque una cuota
+    futura puede caer dentro del rango pedido aunque la fila la anuncie desde antes."""
     fecha_pago_idx = col.get("fecha_pago", col.get("fecha_ex_final"))
-
     rows: list[dict] = []
     # +2: la hoja tiene header en español seguido de header en inglés antes de los datos
     for row in ws.iter_rows(min_row=header_row + 2):
@@ -609,47 +700,69 @@ def _parse_bvc_month(xlsx_bytes: bytes, year: int, month: int) -> list[dict]:
         fecha_ex = _cell_to_date(values[col["fecha_ex"]]) if col["fecha_ex"] < len(values) else None
         if not fecha_ex:
             continue
-        fecha_ex_dt = datetime.date.fromisoformat(fecha_ex)
-        if not (month_start <= fecha_ex_dt <= month_end):
-            continue
 
-        monto = None
-        if col.get("valor_total") is not None and col["valor_total"] < len(values):
-            monto = values[col["valor_total"]]
-        if monto is None and col.get("valor_cuota") is not None and col["valor_cuota"] < len(values):
-            monto = values[col["valor_cuota"]]
+        valor_total = values[col["valor_total"]] if col.get("valor_total") is not None and col["valor_total"] < len(values) else None
+        valor_cuota = values[col["valor_cuota"]] if col.get("valor_cuota") is not None and col["valor_cuota"] < len(values) else None
         try:
-            monto = float(monto)
+            valor_total = float(valor_total) if valor_total is not None else None
+            valor_cuota = float(valor_cuota) if valor_cuota is not None else valor_total
         except (TypeError, ValueError):
+            continue
+        if valor_cuota is None:
             continue
 
         emisor = values[col["emisor"]] if col.get("emisor") is not None and col["emisor"] < len(values) else None
         moneda = values[col["moneda"]] if col.get("moneda") is not None and col["moneda"] < len(values) else "COP"
         modo_pago = values[col["modo_pago"]] if col.get("modo_pago") is not None and col["modo_pago"] < len(values) else None
         descripcion = values[col["descripcion"]] if col.get("descripcion") is not None and col["descripcion"] < len(values) else None
+        descripcion = str(descripcion).strip() if descripcion else None
         fecha_pago = _cell_to_date(values[fecha_pago_idx]) if fecha_pago_idx is not None and fecha_pago_idx < len(values) else None
 
-        rows.append({
-            "ticker"     : ticker,
-            "emisor"     : str(emisor).strip() if emisor else None,
-            "moneda"     : str(moneda).strip().upper() if moneda else "COP",
-            "modo_pago"  : str(modo_pago).strip() if modo_pago else None,
-            "fecha_ex"   : fecha_ex,
-            "fecha_pago" : fecha_pago,
-            "monto"      : monto,
-            "descripcion": str(descripcion).strip() if descripcion else None,
-        })
+        for cuota in _split_cuotas(fecha_ex, fecha_pago, valor_total or valor_cuota, valor_cuota, descripcion):
+            cuota_ex_dt = datetime.date.fromisoformat(cuota["fecha_ex"])
+            if not (start_date <= cuota_ex_dt <= end_date):
+                continue
+            rows.append({
+                "ticker"     : ticker,
+                "emisor"     : str(emisor).strip() if emisor else None,
+                "moneda"     : str(moneda).strip().upper() if moneda else "COP",
+                "modo_pago"  : str(modo_pago).strip() if modo_pago else None,
+                "fecha_ex"   : cuota["fecha_ex"],
+                "fecha_pago" : cuota["fecha_pago"],
+                "monto"      : cuota["monto"],
+                "descripcion": descripcion,
+            })
+    return rows
+
+
+def _parse_bvc_range(xlsx_bytes: bytes, start_date: datetime.date, end_date: datetime.date) -> list[dict]:
+    """Lee las hojas de año que toque el rango (puede cruzar diciembre->enero) y
+    devuelve las cuotas (ver _split_cuotas) cuya fecha ex-dividendo cae en el rango."""
+    wb = load_workbook(io.BytesIO(xlsx_bytes), data_only=True, read_only=True)
+    rows: list[dict] = []
+    for year in range(start_date.year, end_date.year + 1):
+        sheet_name = f"FECHAS EX-DIVIDENDO {year}"
+        if sheet_name not in wb.sheetnames:
+            continue
+        ws = wb[sheet_name]
+        header_row, col = _find_bvc_header_row(ws)
+        if "ticker" not in col or "fecha_ex" not in col:
+            wb.close()
+            raise RuntimeError(f"Headers inesperados en la hoja '{sheet_name}' del boletín BVC")
+        rows.extend(_parse_bvc_sheet(ws, header_row, col, start_date, end_date))
 
     wb.close()
     return rows
 
 
-def fetch_bvc_colombia() -> list[dict]:
-    """Dividendos del mes calendario actual desde el boletín oficial BVC.
-    El yield se calcula con precio de TradingView Overview (único uso restante de TV)."""
+def fetch_bvc_colombia(n_months: int = 3) -> list[dict]:
+    """Dividendos de los últimos n_months meses calendario (incluye el actual)
+    desde el boletín oficial BVC. El yield se calcula con precio de TradingView
+    Overview (único uso restante de TV)."""
     now = datetime.datetime.now(tz=datetime.timezone.utc)
+    start_date, end_date = _month_range(now.year, now.month, n_months)
     xlsx_bytes = _download_bvc_bulletin()
-    raw_rows = _parse_bvc_month(xlsx_bytes, now.year, now.month)
+    raw_rows = _parse_bvc_range(xlsx_bytes, start_date, end_date)
 
     fx_cache: dict[str, float | None] = {}
     seen: dict[tuple, dict] = {}
@@ -699,11 +812,12 @@ def fetch_bvc_colombia() -> list[dict]:
 # ── Preview ───────────────────────────────────────────────────────────────────
 def get_preview() -> dict:
     now = datetime.datetime.now(tz=datetime.timezone.utc)
+    start_date, end_date = _month_range(now.year, now.month, 3)
     rows = fetch_bvc_colombia()
 
     return {
-        "fecha_preview" : now.strftime("%Y-%m-%d %H:%M UTC"),
-        "mes_consultado": now.strftime("%Y-%m"),
+        "fecha_preview"    : now.strftime("%Y-%m-%d %H:%M UTC"),
+        "rango_consultado" : {"desde": start_date.isoformat(), "hasta": end_date.isoformat()},
         "resumen": {
             "bvc_total" : len(rows),
             "con_yield" : sum(1 for r in rows if r["yield_tv_pct"] is not None),
